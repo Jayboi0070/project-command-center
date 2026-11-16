@@ -1,0 +1,16 @@
+{
+  "name": "pcc-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "create-owner": "node scripts/create-owner.js",
+    "test": "node tests/validate.test.js && node tests/stats-backup.test.js"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "bcryptjs": "^2.4.3",
+    "jose": "^5.9.6"
+  }
+}

@@ -1,0 +1,1 @@
+-- Intentionally empty: no fake data. The owner account is created once via POST /api/auth/register (OWNER_EMAIL only).

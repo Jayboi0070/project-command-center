@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https:; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#050b1a">
+<title>Project Command Center</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<main id="login" hidden>
+  <form id="login-form" class="card login-card" autocomplete="on">
+    <p class="eyebrow">Private workspace</p>
+    <h1>Project Command Center</h1>
+    <label>Email<input name="email" type="email" autocomplete="username" required></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <p id="login-error" class="error" role="alert"></p>
+    <button class="btn primary" type="submit">Sign in</button>
+  </form>
+</main>
+<div id="app" hidden>
+  <nav id="nav" aria-label="Main"></nav>
+  <div class="content">
+    <header class="topbar">
+      <h2 id="page-title"></h2>
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+    </header>
+    <section id="view"></section>
+  </div>
+</div>
+<dialog id="modal"></dialog>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
