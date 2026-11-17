@@ -37,7 +37,7 @@ export function route({ methods, auth = true }, fn) {
       const m = { '23514': [400, 'A value violates a database rule'], '23503': [400, 'Referenced record does not exist'], '23505': [409, 'Duplicate record'], '22P02': [400, 'Invalid value'] }[err.code];
       if (m) return res.status(m[0]).json({ error: m[1] });
       console.error('Unhandled error', err.code, err.message);
-      res.status(500).json({ error: 'Server error' });
+      res.status(500).json({ error: 'Server error: ' + String(err.message).slice(0, 200) });
     }
   };
 }
