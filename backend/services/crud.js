@@ -20,7 +20,7 @@ async function assertRefs(res, values, userId) {
   }
 }
 function derive(res, values) {
-    if (res.table === 'monthly_goals' && typeof values.month === 'string') values.month = values.month.slice(0, 8) + '01';
+  if (res.table === 'monthly_goals' && typeof values.month === 'string') values.month = values.month.slice(0, 8) + '01';
   if (res.completion && res.completion in values) values.completed_at = values[res.completion] ? new Date().toISOString() : null;
 }
 const logCte = (entity, action, userIdx) =>
