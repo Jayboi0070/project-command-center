@@ -2,6 +2,7 @@ import { route } from '../middleware/http.js';
 import { HttpError } from '../services/crud.js';
 import { q } from '../services/db.js';
 import { KINDS } from '../services/stats.js';
+import { validateNotifications } from '../services/notify-logic.js';
 
 export default route({ methods: ['GET', 'PATCH'] }, async (req, uid) => {
   if (req.method === 'PATCH') {
@@ -11,8 +12,8 @@ export default route({ methods: ['GET', 'PATCH'] }, async (req, uid) => {
     if ('timezone' in b) { if (!Intl.supportedValuesOf('timeZone').includes(b.timezone) && b.timezone !== 'Africa/Lagos' && b.timezone !== 'UTC') throw new HttpError(400, 'Unknown time zone'); add('timezone', b.timezone); }
     if ('theme' in b) { if (!['dark', 'light', 'system'].includes(b.theme)) throw new HttpError(400, 'Invalid theme'); add('theme', b.theme); }
     if ('notifications' in b) {
-      const n = b.notifications; if (!n || typeof n !== 'object' || Object.values(n).some((v) => typeof v !== 'boolean') || Object.keys(n).length > 20) throw new HttpError(400, 'Invalid notifications');
-      add('notifications', JSON.stringify(n), '::jsonb');
+      const v = validateNotifications(b.notifications); if (v.error) throw new HttpError(400, v.error);
+      add('notifications', JSON.stringify(v.value), '::jsonb');
     }
     if ('daily_targets' in b) {
       const t = b.daily_targets; if (!t || typeof t !== 'object' || Object.entries(t).some(([k, v]) => !KINDS.includes(k) || typeof v !== 'number' || v < 0 || v > 24)) throw new HttpError(400, 'Invalid daily targets (hours 0-24)');

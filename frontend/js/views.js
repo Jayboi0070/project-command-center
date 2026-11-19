@@ -1,6 +1,7 @@
 import { get, post, write, uuid } from './api.js';
 import { esc, $, $$, fmtDate, fmtDT, download, toCSV } from './ui.js';
 import { openForm, loadRefs } from './sections.js';
+import * as push from './push.js';
 
 const KINDS = ['reading', 'research', 'development', 'business', 'exercise', 'review'];
 const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
@@ -33,6 +34,22 @@ const SCHED_FIELDS = [
   { k: 'actual_minutes', l: 'Actual minutes', t: 'number', min: 0, max: 1440 }, { k: 'completed', l: 'Completed', t: 'checkbox' }, { k: 'notes', l: 'Notes', t: 'textarea', max: 2000 }];
 const PRESET = [['University reading', 'reading', 105], ['Research', 'research', 120], ['Software development', 'development', 180], ['Business activity', 'business', 30], ['Exercise', 'exercise', 30], ['Daily review', 'review', 15]];
 
+const pad = (n) => String(n).padStart(2, '0');
+const stamp = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+const icsText = (s) => String(s).replace(/[\\;,]/g, (m) => '\\' + m).replace(/\r?\n/g, '\\n');
+// Calendar file with an alert 10 minutes before and at the start of each timed activity (times are the phone's local time).
+export function buildIcs(rows) {
+  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Project Command Center//EN', 'CALSCALE:GREGORIAN'];
+  for (const r of rows.filter((x) => x.start_time)) {
+    const s = new Date(`${r.day}T${String(r.start_time).slice(0, 5)}:00`);
+    const e = r.end_time ? new Date(`${r.day}T${String(r.end_time).slice(0, 5)}:00`) : new Date(s.getTime() + (r.planned_minutes || 30) * 60000);
+    L.push('BEGIN:VEVENT', `UID:${r.id}@pcc`, `DTSTAMP:${stamp(new Date())}`, `DTSTART:${stamp(s)}`, `DTEND:${stamp(e > s ? e : new Date(s.getTime() + 1800000))}`, `SUMMARY:${icsText(r.activity)}`);
+    for (const trig of ['-PT10M', 'PT0S']) L.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsText(r.activity)}`, `TRIGGER:${trig}`, 'END:VALARM');
+    L.push('END:VEVENT');
+  }
+  L.push('END:VCALENDAR'); return L.join('\r\n');
+}
+
 export async function schedule(root, tz) {
   let day = todayLocal(tz), mode = 'day';
   async function draw() {
@@ -42,7 +59,7 @@ export async function schedule(root, tz) {
     const byDay = {}; rows.forEach((r) => (byDay[r.day] ??= []).push(r));
     const days = mode === 'day' ? [day] : Array.from({ length: 7 }, (_, i) => addDays(from, i));
     root.innerHTML = `<div class="toolbar"><button class="btn" data-a="prev">‹</button><b>${esc(fmtDate(day))}</b><button class="btn" data-a="next">›</button><button class="btn" data-a="today">Today</button>
-      <span class="grow"></span><button class="btn" data-a="mode">${mode === 'day' ? 'Week view' : 'Day view'}</button><button class="btn" data-a="preset">+ Daily targets</button><button class="btn" data-a="resched">Move unfinished to tomorrow</button><button class="btn primary" data-a="add">+ Activity</button></div>
+      <span class="grow"></span><button class="btn" data-a="mode">${mode === 'day' ? 'Week view' : 'Day view'}</button><button class="btn" data-a="ics">Calendar alerts</button><button class="btn" data-a="preset">+ Daily targets</button><button class="btn" data-a="resched">Move unfinished to tomorrow</button><button class="btn primary" data-a="add">+ Activity</button></div>
       <p class="error">${esc(err)}</p>
       ${days.map((dd) => `<div class="card"><h4>${esc(fmtDate(dd))}</h4>${(byDay[dd] || []).length ? `<ul class="list">${byDay[dd].map((r) => `<li><input type="checkbox" data-done="${r.id}" ${r.completed ? 'checked' : ''} aria-label="Completed">
         <span class="grow"><b>${esc(r.activity)}</b> <span class="tag">${esc(r.kind)}</span> <em>${esc(String(r.start_time ?? '').slice(0, 5))}${r.end_time ? '–' + esc(String(r.end_time).slice(0, 5)) : ''}</em></span>
@@ -55,6 +72,11 @@ export async function schedule(root, tz) {
     if (a === 'prev') day = addDays(day, mode === 'day' ? -1 : -7); else if (a === 'next') day = addDays(day, mode === 'day' ? 1 : 7);
     else if (a === 'today') day = todayLocal(tz); else if (a === 'mode') mode = mode === 'day' ? 'week' : 'day';
     else if (a === 'add') return openForm({ res: 'daily_schedules', title: 'Add activity', fields: SCHED_FIELDS, refs: {}, defaults: { day }, afterSave: draw });
+    else if (a === 'ics') {
+      const rows = (root._rows || []).filter((r) => r.day === day && r.start_time);
+      if (!rows.length) return alert('Give at least one activity a start time first.');
+      return download(`schedule-${day}.ics`, buildIcs(rows), 'text/calendar');
+    }
     else if (a === 'preset') { for (const [activity, kind, m] of PRESET) await write('POST', '/api/records/daily_schedules', { client_id: uuid(), day, activity, kind, planned_minutes: m }).catch(() => {}); }
     else if (a === 'resched') { const next = addDays(day, 1); for (const r of root._rows.filter((x) => !x.completed && x.day === day)) await write('PATCH', `/api/records/daily_schedules/${r.id}`, { day: next, rescheduled_from: day }).catch(() => {}); }
     else if (b.dataset.edit) return openForm({ res: 'daily_schedules', title: 'Edit activity', fields: SCHED_FIELDS, row: root._rows.find((r) => r.id === b.dataset.edit), refs: {}, afterSave: draw });
@@ -110,9 +132,16 @@ export async function settings(root, me, onTheme) {
   <div class="card"><h4>Profile</h4><p><b>${esc(me.full_name)}</b><br><span class="muted">${esc(me.email)}</span></p>
     <label>Time zone<select id="tz">${tzs.map((z) => `<option ${z === s.timezone ? 'selected' : ''}>${esc(z)}</option>`).join('')}</select></label>
     <label>Theme<select id="theme">${['dark', 'light', 'system'].map((z) => `<option ${z === s.theme ? 'selected' : ''}>${z}</option>`).join('')}</select></label>
-    <label class="inline"><input type="checkbox" id="n-daily" ${n.daily_review ? 'checked' : ''}> Daily review reminder (preference only; reminders are not sent yet)</label>
     <button class="btn primary" id="save-prefs">Save preferences</button></div>
   <div class="card"><h4>Daily targets (hours)</h4>${KINDS.map((k) => `<label>${k}<input type="number" step="0.25" min="0" max="24" data-target="${k}" value="${s.daily_targets[k]}"></label>`).join('')}<button class="btn primary" id="save-targets">Save targets</button></div>
+  <div class="card" id="notif"><h4>Notifications</h4><p id="n-status" class="muted">Checking…</p>
+    <div class="row"><button class="btn primary" id="n-toggle" hidden></button><button class="btn" id="n-test" hidden>Send test</button></div><p class="error" id="n-msg"></p>
+    <label class="inline"><input type="checkbox" id="n-sched" ${n.schedule !== false ? 'checked' : ''}> Remind me before activities</label>
+    <label>Minutes before<select id="n-lead">${[5, 10, 15, 30, 60].map((m) => `<option ${m === (n.lead ?? 10) ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
+    <label class="inline"><input type="checkbox" id="n-start" ${n.start !== false ? 'checked' : ''}> Alert when an activity starts</label>
+    <label>Morning briefing time<input type="time" id="n-morning" value="${esc(n.morning || '')}"></label>
+    <label>Daily review reminder time<input type="time" id="n-review" value="${esc(n.review || '')}"></label>
+    <button class="btn primary" id="n-save">Save notification settings</button></div>
   <div class="card"><h4>Password</h4><form id="pw"><label>Current<input type="password" name="current" autocomplete="current-password" required></label><label>New (12+ characters)<input type="password" name="next" minlength="12" autocomplete="new-password" required></label><p class="error" id="pw-msg"></p><button class="btn primary">Change password</button></form></div>
   <div class="card"><h4>Backup &amp; restore</h4><p class="muted">A backup file on this device is not enough protection. Keep a copy somewhere else too (see docs/BACKUP_AND_RECOVERY.md).</p>
     <button class="btn primary" id="bk-export">Download full JSON backup</button>
@@ -120,7 +149,18 @@ export async function settings(root, me, onTheme) {
     <h4>History</h4>${hist.length ? `<ul class="list">${hist.map((h) => `<li>${esc(h.kind)} <em>${esc(fmtDT(h.created_at))}</em></li>`).join('')}</ul>` : '<p class="muted">No backups yet.</p>'}</div>
   <div class="card"><h4>Account security</h4><p class="muted">Single-owner account. Sessions last 12 hours; the account locks for 15 minutes after 5 wrong passwords.</p><button class="btn" id="signout">Sign out</button></div></div>`;
   const patch = async (b) => { try { await write('PATCH', '/api/settings', b); return true; } catch { return false; } };
-  $('#save-prefs', root).onclick = async () => { if (await patch({ timezone: $('#tz', root).value, theme: $('#theme', root).value, notifications: { daily_review: $('#n-daily', root).checked } })) { onTheme($('#theme', root).value); } };
+  $('#save-prefs', root).onclick = async () => { if (await patch({ timezone: $('#tz', root).value, theme: $('#theme', root).value, })) { onTheme($('#theme', root).value); } };
+  const NS = { 'need-install': 'To get notifications, add this app to your Home Screen (Share, Add to Home Screen), open it from there, then come back here.', blocked: 'Notifications are blocked for this app. Allow them in your phone Settings, then reopen the app.', off: 'Notifications are off on this device.', on: 'Notifications are on for this device.' };
+  async function refreshN() {
+    const st = await push.status(); $('#n-status', root).textContent = NS[st];
+    const tg = $('#n-toggle', root); tg.hidden = !['off', 'on'].includes(st); tg.textContent = st === 'on' ? 'Turn off' : 'Enable notifications'; tg.dataset.state = st;
+    $('#n-test', root).hidden = st !== 'on';
+  }
+  const nmsg = (m) => { $('#n-msg', root).textContent = m || ''; };
+  $('#n-toggle', root).onclick = async (e) => { nmsg(); try { if (e.target.dataset.state === 'on') await push.disable(); else await push.enable(); } catch (er) { nmsg(er.message); } refreshN(); };
+  $('#n-test', root).onclick = async () => { nmsg(); try { await push.test(); nmsg('Sent. It should arrive in a few seconds.'); } catch (er) { nmsg(er.message); } };
+  $('#n-save', root).onclick = () => patch({ notifications: { schedule: $('#n-sched', root).checked, start: $('#n-start', root).checked, lead: Number($('#n-lead', root).value), morning: $('#n-morning', root).value, review: $('#n-review', root).value } });
+  refreshN();
   $('#save-targets', root).onclick = () => patch({ daily_targets: Object.fromEntries($$('[data-target]', root).map((i) => [i.dataset.target, Number(i.value)])) });
   $('#pw', root).onsubmit = async (e) => { e.preventDefault(); const f = e.target; try { await write('POST', '/api/auth/change-password', { current: f.current.value, next: f.next.value }); $('#pw-msg', root).textContent = 'Password changed.'; f.reset(); } catch (er) { $('#pw-msg', root).textContent = er.message; } };
   $('#bk-export', root).onclick = async () => { try { const b = await get('/api/backup/export'); download(`pcc-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(b), 'application/json'); } catch (e) { alert(e.message); } };

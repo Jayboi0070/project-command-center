@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; base-uri 'none'">
+<meta name="robots" content="noindex,nofollow"><title>Key generator</title><link rel="stylesheet" href="css/style.css"></head>
+<body><main class="content" style="max-width:640px;margin:auto"><div class="card">
+<h3>Notification key generator</h3>
+<p class="muted">The keys are created inside your browser and are never sent anywhere. Copy both into Vercel, then DELETE this page from GitHub.</p>
+<button class="btn primary" id="gen">Generate keys</button>
+<div id="out" hidden>
+<label>VAPID_PUBLIC_KEY<textarea id="pub" rows="3" readonly></textarea></label><button class="btn" data-copy="pub">Copy public key</button>
+<label>VAPID_PRIVATE_KEY (secret)<textarea id="priv" rows="2" readonly></textarea></label><button class="btn" data-copy="priv">Copy private key</button>
+<p id="msg" class="ok"></p></div></div></main><script type="module" src="js/keys.js"></script></body></html>
